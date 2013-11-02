@@ -5,40 +5,46 @@ __author__ = "Devin Kelly"
 import pymongo
 import time
 import json
+import re
 from datetime import datetime
 from tornado import httpclient, ioloop
 
 
+def parseHTML(htmlData):
+
+   expr = re.compile("In current traffic: [0-9]{0,2} mins")
+   matches = re.finditer(expr, htmlData)
+
+   trafficData = []
+   for ii in matches:
+      tmpData = {}
+      s = re.sub('<[^<]+?>', '', htmlData[ii.start(0): ii.start(0) + 180])
+      s = re.sub("<.*$", '', s)
+      (travelTime, route) = s.split('mins')
+
+      route = re.sub("^\s*", "", route)
+      route = re.sub("\s*$", "", route)
+      tmpData["route"] = route
+
+      travelTime = re.sub("^.*:\s*", "", travelTime)
+      tmpData["time"] = travelTime
+
+      trafficData.append(tmpData)
+
+   return trafficData
+
+
 def insertData(coll, data):
 
-   try:
-      if data['status'] != "OK":
-         return
-   except KeyError:
-      print "corrupted data"
-      return
-
-   startAddr = data['destination_addresses']
-   endAddr = data['origin_addresses']
-
-   if coll.find({"startAddr": startAddr}).count() > 0:
-      coll.insert({"startAddr": startAddr})
-
-   if coll.find({"endAddr": endAddr}).count() > 0:
-      coll.insert({"endAddr": endAddr})
-
-   rows = data['rows']
-   for row in rows:
-      for element in row['elements']:
-         commuteTime = element["duration"]["value"]
-         timestamp = time.time()
-         coll.insert({"commuteTime": commuteTime, "timestamp": timestamp})
+   timestamp = time.time()
+   for trip in data:
+      coll.insert({"commuteTime": trip['time'], "timestamp": timestamp, "route": trip['route']})
 
 
 def getWeekdayCommuteTimeFunction(coll, toAddr, fromAddr, startHour, endHour):
    toAddr = toAddr.replace(" ", "+")
    fromAddr = fromAddr.replace(" ", "+")
-   url = "https://maps.googleapis.com/maps/api/distancematrix/json?origins={0}&destinations={1}&sensor=false&units=imperial".format(toAddr, fromAddr)
+   url = "https://maps.google.com/maps?saddr={0}&daddr={1}&hl=en".format(toAddr, fromAddr)
 
    def weekdayCommuteTime():
       now = time.time()
@@ -53,7 +59,9 @@ def getWeekdayCommuteTimeFunction(coll, toAddr, fromAddr, startHour, endHour):
       print 'fetching'
       try:
          response = http_client.fetch(url)
-         insertData(coll, json.loads(response.body))
+         trafficData = parseHTML(response.body)
+         print trafficData
+         insertData(coll, trafficData)
       except httpclient.HTTPError as e:
          print "Error:", e
          http_client.close()
