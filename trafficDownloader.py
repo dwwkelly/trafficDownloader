@@ -6,6 +6,7 @@ import pymongo
 import time
 import json
 import re
+import os
 import daemon
 from datetime import datetime
 from tornado import httpclient, ioloop
@@ -107,10 +108,12 @@ def main():
    [ii.start() for ii in callbacks]
 
    # Start IO Loop
+
    io_loop.start()
 
    return
 
 if __name__ == "__main__":
-   with daemon.DaemonContext():
+   pwd = os.getcwd()
+   with daemon.DaemonContext(working_directory=pwd):
       main()
