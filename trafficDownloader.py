@@ -6,6 +6,7 @@ import pymongo
 import time
 import json
 import re
+import daemon
 from datetime import datetime
 from tornado import httpclient, ioloop
 
@@ -97,7 +98,7 @@ def main():
 
    # afternoon commute
    startHour = 15
-   endHour = 19
+   endHour = 23
    coll = db["afternoon"]
    F2 = getWeekdayCommuteTimeFunction(coll, work, home, startHour, endHour)
    callbacks.append(ioloop.PeriodicCallback(F2, interval, io_loop))
@@ -111,4 +112,5 @@ def main():
    return
 
 if __name__ == "__main__":
-   main()
+   with daemon.DaemonContext():
+      main()
